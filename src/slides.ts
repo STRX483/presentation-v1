@@ -40,7 +40,7 @@ export const slides: Slide[] = [
     deck: 'survive',
     kicker: 'Герои',
     title: 'Персонажи',
-    body: ['Герой 1 — описание.', 'Герой 2 — описание.'],
+    body: ['Герой 1 — Студент.FPV. Видно только руки.', 'Герой 2  — Boss. Стражник.'],
   },
   {
     image: '/slides/s05.webp',
