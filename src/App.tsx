@@ -2,61 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { DECKS, slides } from './slides'
 import './App.css'
 
-function ProgressiveImg({
-  src,
-  alt = '',
-  className = '',
-  draggable = false,
-  onLoad,
-}: {
-  src: string
-  alt?: string
-  className?: string
-  draggable?: boolean
-  onLoad?: () => void
-}) {
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    let active = true
-    const img = new Image()
-    img.src = src
-    if (img.complete) {
-      setLoaded(true)
-      onLoad?.()
-    } else {
-      img.onload = () => {
-        if (active) {
-          setLoaded(true)
-          onLoad?.()
-        }
-      }
-    }
-    return () => {
-      active = false
-    }
-  }, [src, onLoad])
-
-  return (
-    <img
-      src={src}
-      alt={alt}
-      draggable={draggable}
-      className={`p-img ${loaded ? 'p-img-loaded' : 'p-img-loading'} ${className}`.trim()}
-    />
-  )
-}
-
 export default function App() {
   const [i, setI] = useState(0)
   const [uiHidden, setUiHidden] = useState(false)
-  const [hoveredFrame, setHoveredFrame] = useState<string | null>(null)
-
-  // Preloader & Intro Overlay State
-  const [loadingProgress, setLoadingProgress] = useState(0)
-  const [isIntroActive, setIsIntroActive] = useState(true)
-  const [isIntroFading, setIsIntroFading] = useState(false)
-
   const touchX = useRef<number | null>(null)
   const total = slides.length
   const slide = slides[i]
@@ -84,82 +32,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [go, i, total])
 
-  // Initial Slide 1 Preload & Intro Screen dismissal
+  // Preload neighbours so transitions never flash
   useEffect(() => {
-    let isMounted = true
-    const img0 = new Image()
-    img0.src = slides[0].image
-
-    const updateProgress = (pct: number) => {
-      if (isMounted) setLoadingProgress((prev) => Math.max(prev, pct))
-    }
-
-    // Smooth fake progress while downloading
-    const timer1 = setTimeout(() => updateProgress(35), 150)
-    const timer2 = setTimeout(() => updateProgress(70), 400)
-
-    const onComplete = () => {
-      updateProgress(100)
-      setTimeout(() => {
-        if (isMounted) setIsIntroFading(true)
-        setTimeout(() => {
-          if (isMounted) setIsIntroActive(false)
-        }, 800)
-      }, 300)
-    }
-
-    if (img0.complete) {
-      onComplete()
-    } else {
-      img0.onload = onComplete
-      img0.onerror = onComplete
-    }
-
-    return () => {
-      isMounted = false
-      clearTimeout(timer1)
-      clearTimeout(timer2)
-    }
-  }, [])
-
-  // Sequential background step-by-step preloader for remaining slides
-  useEffect(() => {
-    if (isIntroActive) return
-
-    let isMounted = true
-    const allUrls: string[] = []
-
-    slides.forEach((s) => {
-      if (s.image && !allUrls.includes(s.image)) allUrls.push(s.image)
-      if (s.frames) {
-        s.frames.forEach((f) => {
-          if (!allUrls.includes(f)) allUrls.push(f)
-        })
+    ;[i + 1, i + 2, i - 1].forEach((n) => {
+      if (slides[n]) {
+        const img = new Image()
+        img.src = slides[n].image
       }
     })
+  }, [i])
 
-    // Step-by-step queue
-    let queueIndex = 0
-    const preloadNext = () => {
-      if (!isMounted || queueIndex >= allUrls.length) return
-      const url = allUrls[queueIndex]
-      queueIndex++
-      const img = new Image()
-      img.src = url
-      img.onload = () => {
-        if (isMounted) setTimeout(preloadNext, 120)
-      }
-      img.onerror = () => {
-        if (isMounted) setTimeout(preloadNext, 120)
-      }
-    }
-
-    const startTimer = setTimeout(preloadNext, 400)
-    return () => {
-      isMounted = false
-      clearTimeout(startTimer)
-    }
-  }, [isIntroActive])
+  const [hoveredFrame, setHoveredFrame] = useState<string | null>(null)
 
   // Reset hovered frame on slide change
   useEffect(() => {
@@ -178,20 +61,6 @@ export default function App() {
         touchX.current = null
       }}
     >
-      {/* Intro Loading Overlay */}
-      {isIntroActive && (
-        <div className={`intro-overlay ${isIntroFading ? 'fading' : ''}`}>
-          <div className="intro-content">
-            <span className="intro-badge">HSE: SURVIVE x ПРОИЗВЕДЕНИЕ</span>
-            <h2 className="intro-title">Загрузка презентации</h2>
-            <div className="intro-bar">
-              <span style={{ width: `${loadingProgress}%` }} />
-            </div>
-            <span className="intro-percent">{loadingProgress}%</span>
-          </div>
-        </div>
-      )}
-
       <div className="progress">
         <span style={{ width: `${((i + 1) / total) * 100}%` }} />
       </div>
@@ -199,8 +68,8 @@ export default function App() {
       {slides.map((s, n) => {
         const isActive = n === i
         const isBoard = Boolean(s.frames)
-        const bgImages = isBoard ? (s.frames || []) : []
-        const currentActiveBg = isBoard ? hoveredFrame : s.image
+        const bgImages = isBoard ? [s.image, ...(s.frames || [])] : []
+        const currentActiveBg = isBoard ? (hoveredFrame || s.image) : s.image
 
         return (
           <figure
@@ -212,7 +81,7 @@ export default function App() {
               <>
                 <div className="board-bg-layer">
                   {Array.from(new Set(bgImages)).map((imgSrc) => (
-                    <ProgressiveImg
+                    <img
                       key={imgSrc}
                       src={imgSrc}
                       alt=""
@@ -229,14 +98,14 @@ export default function App() {
                       key={`${src}-${k}`}
                       onMouseEnter={() => setHoveredFrame(src)}
                     >
-                      <ProgressiveImg src={src} alt="" draggable={false} />
+                      <img src={src} alt="" draggable={false} />
                       <span>{String(k + 1).padStart(2, '0')}</span>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
-              <ProgressiveImg src={s.image} alt={s.title} draggable={false} />
+              <img src={s.image} alt={s.title} draggable={false} />
             )}
           </figure>
         )
